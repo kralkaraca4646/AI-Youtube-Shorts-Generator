@@ -7,7 +7,7 @@ class Composer:
         self.temp_dir = os.path.join(os.getcwd(), "assets", "temp")
         self.final_dir = os.path.join(os.getcwd(), "assets", "final")
         self.avatar_path = os.path.join(os.getcwd(), "assets", "avatar", "avatars.mp4")
-        
+
         os.makedirs(self.temp_dir, exist_ok=True)
         os.makedirs(self.final_dir, exist_ok=True)
         self.transitions = ['fade', 'diagbr', 'diagtl']
@@ -36,18 +36,18 @@ class Composer:
             if is_avatar:
                 # --- AVATAR MODE (Single Loop + CROP) ---
                 print(f"   ⚙️ Processing Scene {scene_id}: 🤖 Avatar Mode (Cropped)")
-                
+
                 video_stream = (
                     ffmpeg.input(video_pair[0], stream_loop=-1)
                     .trim(duration=total_duration + 0.5)
                     .setpts('PTS-STARTPTS')
-                    
+
                     # ---------------------------------------------------------
                     # ✂️ LOGO REMOVAL CROP
                     # ---------------------------------------------------------
                     # Current setting: Removes 150px from BOTTOM.
-                    .filter('crop', 'iw', 'ih-150', 0, 0) 
-                    
+                    .filter('crop', 'iw', 'ih-150', 0, 0)
+
                     # ---------------------------------------------------------
                     # 📏 RESIZE & CENTER
                     # ---------------------------------------------------------
@@ -59,9 +59,9 @@ class Composer:
                 # --- DUAL VIDEO MODE (50/50 Split) ---
                 print(f"   ⚙️ Processing Scene {scene_id}: 🎞️ A/B Split Mode")
                 path_a, path_b = video_pair
-                
+
                 duration_a = total_duration / 2
-                duration_b = (total_duration / 2) + 0.5 
+                duration_b = (total_duration / 2) + 0.5
 
                 stream_a = (
                     ffmpeg.input(path_a, stream_loop=-1)
@@ -83,15 +83,15 @@ class Composer:
 
             # Combine Video + Audio
             runner = ffmpeg.output(
-                video_stream, 
-                input_audio, 
-                output_path, 
-                vcodec='libx264', 
-                acodec='aac', 
+                video_stream,
+                input_audio,
+                output_path,
+                vcodec='libx264',
+                acodec='aac',
                 pix_fmt='yuv420p',
                 shortest=None
             )
-            
+
             runner.run(overwrite_output=True, quiet=True)
             return output_path
 
@@ -99,7 +99,7 @@ class Composer:
             print(f"❌ Render Fail Scene {scene_id}: {e.stderr.decode('utf8') if e.stderr else str(e)}")
             return None
 
-def render_all_scenes(self, script_data, video_pairs):
+    def render_all_scenes(self, script_data, video_pairs):
         """
         Iterates script and renders individual scenes.
         Avatar injection is disabled — every scene uses A/B Split Mode.
@@ -122,6 +122,7 @@ def render_all_scenes(self, script_data, video_pairs):
                 rendered_paths.append(output_path)
 
         return rendered_paths
+
     def concatenate_with_transitions(self, video_paths, output_filename="final_short.mp4"):
         """
         Stitches rendered scenes together.
@@ -129,7 +130,7 @@ def render_all_scenes(self, script_data, video_pairs):
         """
         print("🎬 Stitching final video...")
         output_path = os.path.join(self.final_dir, output_filename)
-        
+
         if os.path.exists(output_path):
             try:
                 os.remove(output_path)
@@ -142,49 +143,49 @@ def render_all_scenes(self, script_data, video_pairs):
         input1 = ffmpeg.input(video_paths[0])
         v_stream = input1.video
         a_stream = input1.audio
-        
+
         current_dur = self.get_duration(video_paths[0])
 
         for i in range(1, len(video_paths)):
             next_clip = ffmpeg.input(video_paths[i])
             next_dur = self.get_duration(video_paths[i])
-            
+
             trans_dur = 0.5
             offset = current_dur - trans_dur
-            
+
             effect = random.choice(self.transitions)
             print(f"   ✨ Transition {i}: '{effect}' at {offset:.2f}s")
 
             v_stream = ffmpeg.filter(
-                [v_stream, next_clip.video], 
-                'xfade', 
-                transition=effect, 
-                duration=trans_dur, 
+                [v_stream, next_clip.video],
+                'xfade',
+                transition=effect,
+                duration=trans_dur,
                 offset=offset
             )
-            
+
             a_stream = ffmpeg.filter(
-                [a_stream, next_clip.audio], 
-                'acrossfade', 
+                [a_stream, next_clip.audio],
+                'acrossfade',
                 d=trans_dur
             )
-            
+
             current_dur = (current_dur + next_dur) - trans_dur
 
         try:
             runner = ffmpeg.output(
-                v_stream, 
-                a_stream, 
-                output_path, 
+                v_stream,
+                a_stream,
+                output_path,
                 vcodec='libx264',   # Standard H.264 video
                 acodec='aac',       # Standard AAC audio
                 pix_fmt='yuv420p',  # 🔥 FIX 1: Windows compatibility
                 movflags='faststart', # 🔥 FIX 2: Corruption fix
-                preset='medium' 
+                preset='medium'
             )
-            
+
             runner.run(overwrite_output=True, quiet=False)
-            
+
             print(f"✅ FINAL VIDEO SAVED: {output_path}")
             return output_path
 
