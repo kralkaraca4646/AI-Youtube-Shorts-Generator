@@ -60,8 +60,9 @@ class Composer:
                 # ASS Altyazı Dosyasını Üret
                 ASSSubtitleGenerator.create_ass_file(word_timestamps, ass_path)
                 
-                # FFmpeg libass filtresi ile altyazıyı göm
-                video_stream = video_stream.filter('subtitles', ass_path)
+                # Relative path alarak FFmpeg yol çakışmasını önlüyoruz
+                rel_ass_path = os.path.relpath(ass_path)
+                video_stream = video_stream.filter('subtitles', rel_ass_path)
 
             runner = ffmpeg.output(
                 video_stream,
