@@ -18,11 +18,13 @@ class ContentBrain:
         """
         In a full build, this would scrape Google Trends or Twitter.
         For now, we ask the model to pick a viral niche topic.
+        The topic itself is asked in Turkish so it fits the channel's language.
         """
         prompt = (
-            "Give me 1 specific, viral, and engaging topic for a Short "
-            "Documentary. It should be a 'Engaging Did you know' fact or a "
-            "'Fun/intriguing Engaging News'. return ONLY the topic name."
+            "Bana kısa bir belgesel (Short Documentary) için spesifik, viral "
+            "ve ilgi çekici 1 konu ver. 'İlginç bir bilgi' (Did you know) "
+            "tarzında ya da 'eğlenceli/merak uyandırıcı bir haber' tarzında "
+            "olsun. SADECE konu adını Türkçe olarak döndür, başka hiçbir şey yazma."
         )
         client = _get_client()
         response = client.chat.completions.create(
@@ -39,55 +41,65 @@ class ContentBrain:
     def generate_script(self, topic):
         """
         Generates a structured JSON script with visual cues.
+        The voiceover text ('text') is in Turkish.
+        The visual search terms ('visual_1', 'visual_2') stay in English,
+        because Pexels search results are far more reliable in English.
         """
         print(f"📝 Writing script for: {topic}...")
         prompt = f"""
-You are the lead scriptwriter for a high-retention "Edutainment" YouTube Shorts channel.
-Topic: {topic}
+Sen yüksek izlenme oranına sahip bir "Edutainment" YouTube Shorts kanalının
+baş senaristisin.
+Konu: {topic}
 
-### GOAL:
-Create a script where every sentence has a "Visual Switch".
-To keep retention high, we need TWO different stock videos for every single scene.
+### AMAÇ:
+Her cümlede bir "Görsel Geçişi (Visual Switch)" olan bir senaryo oluştur.
+İzlenme oranını yüksek tutmak için her sahne için İKİ farklı stok video
+kullanacağız.
 
-### 1. SCRIPT REQUIREMENTS (The Voiceover):
-- **Perspective:** Strictly **3rd Person** ("Scientists found...", "The ocean hides...").
-- **Tone:** Engaging, fast-paced, logical. No fluff.
-- **Structure:** 8-9 Scenes total.
-- **Flow:** Hook -> Context -> Mechanism (How it works) -> Twist -> Outro.
+### 1. SENARYO GEREKSİNİMLERİ (Seslendirme Metni):
+- **Dil:** "text" alanındaki tüm metinler **TÜRKÇE** olmalı, doğal ve akıcı bir Türkçe kullan.
+- **Bakış Açısı:** Kesinlikle **3. tekil/çoğul şahıs** ("Bilim insanları keşfetti...", "Okyanus şunu saklıyor...").
+- **Ton:** İlgi çekici, hızlı tempolu, mantıklı. Gereksiz laf kalabalığı yok.
+- **Yapı:** Toplam 8-9 Sahne.
+- **Akış:** Giriş (Hook) -> Bağlam (Context) -> Mekanizma (Nasıl çalışır) -> Sürpriz/Twist -> Kapanış (Outro).
 
-### 2. VISUAL REQUIREMENTS (Dual Visuals):
-- For EVERY scene, provide TWO distinct search terms:
-  - **visual_1:** Matches the *start* of the sentence.
-  - **visual_2:** Matches the *end* of the sentence or provides a reaction/context.
-- **Strictly Literal:** If the text is "The economy crashed," do NOT search "sad man". Search "Stock market red chart".
+### 2. GÖRSEL GEREKSİNİMLERİ (Çift Görsel):
+- HER sahne için İKİ farklı arama terimi ver.
+- **ÖNEMLİ:** "visual_1" ve "visual_2" alanları mutlaka **İNGİLİZCE** olmalı
+  (Pexels stok video arama motoru İngilizce terimlerde çok daha iyi sonuç veriyor).
+  - **visual_1:** Cümlenin *başlangıcıyla* eşleşen İngilizce arama terimi.
+  - **visual_2:** Cümlenin *sonuyla* ya da bir tepki/bağlam görseliyle eşleşen İngilizce arama terimi.
+- **Kesinlikle Birebir:** Eğer metin "Ekonomi çöktü" ise "sad man" gibi soyut
+  bir şey arama. "Stock market red chart" gibi birebir eşleşen bir şey ara.
 
-### OUTPUT FORMAT (Strict JSON):
+### ÇIKTI FORMATI (Kesin JSON):
 [
     {{
         "id": 1,
-        "text": "In 1995, fourteen wolves were released into Yellowstone Park, and they changed the rivers.",
+        "text": "1995 yılında Yellowstone Parkı'na on dört kurt salındı ve nehirleri değiştirdiler.",
         "visual_1": "wolves running snow aerial",
         "visual_2": "river flowing forest drone",
         "mood": "intriguing"
     }},
     {{
         "id": 2,
-        "text": "It sounds impossible, but the biology is actually simple math.",
+        "text": "İmkansız gibi görünüyor ama aslında biyoloji basit bir matematik.",
         "visual_1": "person shocked looking at camera",
         "visual_2": "blackboard math equations chalk",
         "mood": "educational"
     }}
 ]
-### IMPORTANT
-Return ONLY valid JSON.
 
-Do NOT write any explanation.
+### ÖNEMLİ
+Sadece geçerli JSON döndür.
 
-Do NOT use markdown.
+Hiçbir açıklama yazma.
 
-Do NOT wrap the JSON inside ```json.
+Markdown kullanma.
 
-Return ONLY the JSON array.
+JSON'u ```json içine sarma.
+
+Sadece JSON dizisini döndür.
 """
 
         client = _get_client()
