@@ -99,46 +99,30 @@ class Composer:
             print(f"❌ Render Fail Scene {scene_id}: {e.stderr.decode('utf8') if e.stderr else str(e)}")
             return None
 
-    def render_all_scenes(self, script_data, video_pairs):
-        """
-        Iterates script, handles Avatar injection logic (TWICE), and renders individual scenes.
-        """
-        rendered_paths = []
-        
-        # 1. Randomly pick TWO distinct middle scenes for the Avatar
-        # We pick from range [1, len-2] to avoid the Hook (0) and Outro (last)
-        avatar_indices = []
-        
-        # Only inject if we have enough scenes (need at least 4 scenes to safely pick 2 middle ones)
-        if len(script_data) >= 4 and os.path.exists(self.avatar_path):
-            valid_range = list(range(1, len(script_data) - 1)) # All valid middle indices
-            
-            # Pick 2 unique indices if possible, otherwise just 1
-            count_to_pick = 2 if len(valid_range) >= 2 else 1
-            avatar_indices = random.sample(valid_range, count_to_pick)
-            
-            # Sort them just for cleaner logging
-            avatar_indices.sort()
-            human_readable_indices = [i + 1 for i in avatar_indices]
-            print(f"🎲 Avatar set for Scenes: {human_readable_indices}")
+   def render_all_scenes(self, script_data, video_pairs):
+       """
+       Iterates script and renders individual scenes.
+       Avatar injection is disabled — every scene uses A/B Split Mode.
+       """
+       rendered_paths = []
+       avatar_indices = []  # Avatar mode disabled — never populated
 
-        # 2. Render Loop
-        for i, scene in enumerate(script_data):
-            current_pair = video_pairs[i]
-            is_avatar = False
+       # 2. Render Loop
+       for i, scene in enumerate(script_data):
+           current_pair = video_pairs[i]
+           is_avatar = False
 
-            # Injection Logic: Check if current index is in our chosen list
-            if i in avatar_indices:
-                current_pair = (self.avatar_path, None)
-                is_avatar = True
+           if i in avatar_indices:
+               current_pair = (self.avatar_path, None)
+               is_avatar = True
             elif current_pair is None:
-                continue 
+                continue
 
             output_path = self.process_scene(scene, current_pair, is_avatar)
             if output_path:
                 rendered_paths.append(output_path)
-        
-        return rendered_paths
+
+       return rendered_paths
 
     def concatenate_with_transitions(self, video_paths, output_filename="final_short.mp4"):
         """
