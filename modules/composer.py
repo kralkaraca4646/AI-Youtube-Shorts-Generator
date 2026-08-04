@@ -99,22 +99,21 @@ class Composer:
             print(f"❌ Render Fail Scene {scene_id}: {e.stderr.decode('utf8') if e.stderr else str(e)}")
             return None
 
-   def render_all_scenes(self, script_data, video_pairs):
-       """
-       Iterates script and renders individual scenes.
-       Avatar injection is disabled — every scene uses A/B Split Mode.
-       """
-       rendered_paths = []
-       avatar_indices = []  # Avatar mode disabled — never populated
+def render_all_scenes(self, script_data, video_pairs):
+        """
+        Iterates script and renders individual scenes.
+        Avatar injection is disabled — every scene uses A/B Split Mode.
+        """
+        rendered_paths = []
+        avatar_indices = []  # Avatar mode disabled — never populated
 
-       # 2. Render Loop
-       for i, scene in enumerate(script_data):
-           current_pair = video_pairs[i]
-           is_avatar = False
+        for i, scene in enumerate(script_data):
+            current_pair = video_pairs[i]
+            is_avatar = False
 
-           if i in avatar_indices:
-               current_pair = (self.avatar_path, None)
-               is_avatar = True
+            if i in avatar_indices:
+                current_pair = (self.avatar_path, None)
+                is_avatar = True
             elif current_pair is None:
                 continue
 
@@ -122,8 +121,7 @@ class Composer:
             if output_path:
                 rendered_paths.append(output_path)
 
-       return rendered_paths
-
+        return rendered_paths
     def concatenate_with_transitions(self, video_paths, output_filename="final_short.mp4"):
         """
         Stitches rendered scenes together.
