@@ -6,17 +6,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 def _get_client():
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("GROQ_API_KEY is not set.")
     return Groq(api_key=api_key)
 
-
 class ContentBrain:
-    # Rotated mechanically (not left to the model) so consecutive runs
-    # don't keep landing on the same angle (e.g. always "door mechanism").
     CAR_SUBCATEGORIES = [
         "üretim süreci ve fabrika sırları",
         "rekor kıran hız/performans özellikleri",
@@ -31,13 +27,6 @@ class ContentBrain:
     ]
 
     def get_trending_topic(self):
-        """
-        In a full build, this would scrape Google Trends or Twitter.
-        For now, we ask the model to pick a viral niche topic, but we force
-        variety by randomly picking a subcategory ourselves first — this
-        guarantees the topic angle rotates across runs instead of the model
-        drifting back to the same easy answer (e.g. door mechanisms) every time.
-        """
         subcategory = random.choice(self.CAR_SUBCATEGORIES)
 
         prompt = (
@@ -57,9 +46,7 @@ class ContentBrain:
         client = _get_client()
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": prompt}]
         )
 
         topic = response.choices[0].message.content.strip()
@@ -67,28 +54,18 @@ class ContentBrain:
         return topic
 
     def generate_script(self, topic):
-        """
-        Generates a structured JSON script with visual cues.
-        The voiceover text ('text') is in Turkish.
-        The visual search terms ('visual_1', 'visual_2') stay in English,
-        because Pexels search results are far more reliable in English.
-        """
         print(f"📝 Writing script for: {topic}...")
         prompt = f"""
-Sen yüksek izlenme oranına sahip bir "Edutainment" YouTube Shorts kanalının
-baş senaristisin.
+Sen yüksek izlenme oranına sahip bir "Edutainment" YouTube Shorts kanalının baş senaristisin.
 Konu: {topic}
 
 ### AMAÇ:
 Her cümlede bir "Görsel Geçişi (Visual Switch)" olan bir senaryo oluştur.
-İzlenme oranını yüksek tutmak için her sahne için İKİ farklı stok video
-kullanacağız.
+İzlenme oranını yüksek tutmak için her sahne için İKİ farklı stok video kullanacağız.
 
 ### 1. SENARYO GEREKSİNİMLERİ (Seslendirme Metni):
 - **Dil:** "text" alanındaki tüm metinler **TÜRKÇE** olmalı, doğal ve akıcı bir Türkçe kullan.
-- **Uzunluk:** HER sahne metni **15-25 kelime** arasında olmalı. Tek kelimelik
-  ya da çok kısa yarım cümlelerden kaçın — her sahne kendi başına doyurucu,
-  tam bir düşünce/bilgi içermeli.
+- **Uzunluk:** HER sahne metni **15-25 kelime** arasında olmalı. Tek kelimelik ya da çok kısa yarım cümlelerden kaçın — her sahne kendi başına doyurucu, tam bir düşünce/bilgi içermeli.
 - **Bakış Açısı:** Kesinlikle **3. tekil/çoğul şahıs** ("Mühendisler keşfetti...", "Bu model şunu başardı...").
 - **Ton:** İlgi çekici, hızlı tempolu, mantıklı. Gereksiz laf kalabalığı yok ama her cümle bilgi dolu olmalı.
 - **Yapı:** Toplam 8-9 Sahne.
@@ -96,14 +73,11 @@ kullanacağız.
 
 ### 2. GÖRSEL GEREKSİNİMLERİ (Çift Görsel):
 - HER sahne için İKİ farklı arama terimi ver.
-- **ÖNEMLİ:** "visual_1" ve "visual_2" alanları mutlaka **İNGİLİZCE** olmalı
-  (Pexels stok video arama motoru İngilizce terimlerde çok daha iyi sonuç veriyor).
-  - **visual_1:** Cümlenin *başlangıcıyla* eşleşen İngilizce arama terimi.
-  - **visual_2:** Cümlenin *sonuyla* ya da bir tepki/bağlam görseliyle eşleşen İngilizce arama terimi.
-- **Kesinlikle Birebir:** Eğer metin "Ekonomi çöktü" ise "sad man" gibi soyut
-  bir şey arama. "Stock market red chart" gibi birebir eşleşen bir şey ara.
+- **ÖNEMLİ:** "visual_1" ve "visual_2" alanları mutlaka **İNGİLİZCE** olmalı.
+  - **visual_1:** Cümlenin başlangıcıyla eşleşen İngilizce arama terimi.
+  - **visual_2:** Cümlenin sonuyla ya da bir tepki/bağlam görseliyle eşleşen İngilizce arama terimi.
 
-### ÇIKTI FORMATI (Kesin JSON):
+### ÇIKTI FORMATI (Kesin JSON Dizisi):
 [
     {{
         "id": 1,
@@ -122,23 +96,12 @@ kullanacağız.
 ]
 
 ### ÖNEMLİ
-Sadece geçerli JSON döndür.
-
-Hiçbir açıklama yazma.
-
-Markdown kullanma.
-
-JSON'u ```json içine sarma.
-
-Sadece JSON dizisini döndür.
+Sadece geçerli JSON döndür. Hiçbir açıklama yazma. Markdown kullanma. JSON'u ```json içine sarma. Sadece JSON dizisini döndür.
 """
-
         client = _get_client()
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            messages=[{"role": "user", "content": prompt}]
         )
 
         clean_text = (
@@ -157,15 +120,32 @@ Sadece JSON dizisini döndür.
 
         return script
 
+    def generate_metadata(self, topic, script):
+        prompt = f"""
+Şu konu için YouTube Shorts başlığı, açıklaması ve hashtagler üret:
+Konu: {topic}
 
-# --- TESTING THE MODULE ---
-if __name__ == "__main__":
-    brain = ContentBrain()
-    topic = brain.get_trending_topic()
-    script = brain.generate_script(topic)
+ÇIKTI FORMATI (JSON):
+{{
+    "title": "Bugatti'nin Gizli Mühendislik Sırrı! 🏎️ #shorts",
+    "description": "Bugatti mühendislerinin sakladığı inanılmaz detayları keşfedin! #araba #otomobil #bugatti #viral",
+    "hashtags": ["#shorts", "#araba", "#otomobil", "#bugatti", "#viral"]
+}}
+Sadece geçerli JSON döndür.
+"""
+        client = _get_client()
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-    # Save to file to verify
-    with open("script.json", "w") as f:
-        json.dump(script, f, indent=4)
-        print("✅ Script saved to script.json")
+        clean_text = response.choices[0].message.content.replace("```json", "").replace("```", "").strip()
+        try:
+            return json.loads(clean_text)
+        except:
+            return {
+                "title": f"{topic} #shorts",
+                "description": f"{topic} hakkında bilinmeyenler.",
+                "hashtags": ["#shorts", "#otomobil"]
+            }
         
