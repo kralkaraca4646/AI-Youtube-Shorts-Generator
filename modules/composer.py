@@ -1,8 +1,7 @@
 import os
 import random
 import ffmpeg
-from modules.subtitle_generator import 
-ASSSubtitleGenerator
+from modules.subtitle_generator import ASSSubtitleGenerator
 
 class Composer:
     def __init__(self):
