@@ -1,7 +1,8 @@
 import os
 import random
-import textwrap
 import ffmpeg
+from modules.subtitle_generator import 
+ASSSubtitleGenerator
 
 class Composer:
     def __init__(self):
@@ -19,39 +20,17 @@ class Composer:
         except:
             return 0.0
 
-    def _wrap_subtitle(self, text, width=18):
-        return textwrap.fill(text, width=width)
-
-    def _add_subtitle(self, video_stream, text):
-        wrapped_text = self._wrap_subtitle(text.upper(), width=18)
-
-        return video_stream.filter(
-            'drawtext',
-            text=wrapped_text,
-            font='Sans-Bold',
-            fontsize=68,
-            fontcolor='yellow',
-            bordercolor='black',
-            borderw=7,
-            shadowcolor='black@0.8',
-            shadowx=4,
-            shadowy=4,
-            line_spacing=12,
-            x='(w-text_w)/2',
-            y='(h-text_h)/2 + 250'
-        )
-
     def process_scene(self, scene, video_pair):
         scene_id = scene['id']
         audio_path = scene['audio_path']
         total_duration = scene['duration']
-        scene_text = scene.get('text', '')
+        word_timestamps = scene.get('word_timestamps', [])
         output_path = os.path.join(self.temp_dir, f"scene_{scene_id}.mp4")
 
         try:
             input_audio = ffmpeg.input(audio_path)
 
-            print(f"   ⚙️ Processing Scene {scene_id}: 🎞️ A/B Split Mode")
+            print(f"   ⚙️ Processing Scene {scene_id}: 🎞️ A/B Split Mode & ASS Subtitles")
             path_a, path_b = video_pair
             duration_a = total_duration / 2
             duration_b = (total_duration / 2) + 0.5
@@ -74,8 +53,16 @@ class Composer:
 
             video_stream = ffmpeg.concat(stream_a, stream_b, v=1, a=0)
 
-            if scene_text:
-                video_stream = self._add_subtitle(video_stream, scene_text)
+            # --- LIBASS SUBTITLE ENTEGRASYONU ---
+            if word_timestamps:
+                ass_filename = f"scene_{scene_id}.ass"
+                ass_path = os.path.join(self.temp_dir, ass_filename)
+                
+                # ASS Altyazı Dosyasını Üret
+                ASSSubtitleGenerator.create_ass_file(word_timestamps, ass_path)
+                
+                # FFmpeg libass filtresi ile altyazıyı göm
+                video_stream = video_stream.filter('subtitles', ass_path)
 
             runner = ffmpeg.output(
                 video_stream,
@@ -171,4 +158,3 @@ class Composer:
         except ffmpeg.Error as e:
             print(f"❌ Stitching Error: {e.stderr.decode('utf8') if e.stderr else str(e)}")
             return None
-            
