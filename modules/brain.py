@@ -1,15 +1,15 @@
 import os
 import json
-from google import genai
+from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
 
 def _get_client():
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is not set. Create a .env file or set the environment variable before running.")
-    return genai.Client(api_key=api_key)
+        raise RuntimeError("GROQ_API_KEY is not set.")
+    return Groq(api_key=api_key)
 
 class ContentBrain:
     def get_trending_topic(self):
@@ -19,8 +19,17 @@ class ContentBrain:
         """
         prompts = "Give me 1 specific, viral, and engaging topic for a Short Documentary. It should be a 'Engaging Did you know' fact or a 'Fun/intriguing Engaging News'. return ONLY the topic name."
         client = _get_client()
-        response = client.models.generate_content(model=os.getenv('GEMINI_MODEL', 'gemini-2.0-flash'), contents=prompts)
-        topic = response.text.strip()
+       response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[
+        {
+            "role": "user",
+            "content": prompts
+        }
+    ]
+)
+
+topic = response.choices[0].message.content.strip()
         print(f"🎯 Selected Topic: {topic}")
         return topic
 
@@ -106,18 +115,22 @@ class ContentBrain:
     
 
         client = _get_client()
-        response = client.models.generate_content(model=os.getenv('GEMINI_MODEL', 'gemini-2.0-flash'), contents=prompt)
-        
-        # Clean the response to ensure it's valid JSON (sometimes AI adds markdown)
-        clean_text = response.text.replace('```json', '').replace('```', '').strip()
-        
-        try:
-            script_data = json.loads(clean_text)
-            return script_data
-        except json.JSONDecodeError:
-            print("❌ Error parsing JSON. Raw output:")
-            print(clean_text)
-            return None
+        response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[
+        {
+            "role": "user",
+            "content": prompt
+        }
+    ]
+)
+
+clean_text = (
+    response.choices[0].message.content
+    .replace("```json", "")
+    .replace("```", "")
+    .strip()
+)
         
 # --- TESTING THE MODULE ---
 if __name__ == "__main__":
