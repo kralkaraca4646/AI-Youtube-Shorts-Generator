@@ -19,19 +19,19 @@ class ContentBrain:
         """
         prompts = "Give me 1 specific, viral, and engaging topic for a Short Documentary. It should be a 'Engaging Did you know' fact or a 'Fun/intriguing Engaging News'. return ONLY the topic name."
         client = _get_client()
-       response = client.chat.completions.create(
-    model="llama-3.3-70b-versatile",
-    messages=[
-        {
-            "role": "user",
-            "content": prompts
-        }
-    ]
+        response = client.chat.completions.create(
+             model="llama-3.3-70b-versatile",
+             messages=[
+                  {
+                      "role": "user",
+                      "content": prompts
+                  }
+        ]
 )
 
 topic = response.choices[0].message.content.strip()
-        print(f"🎯 Selected Topic: {topic}")
-        return topic
+print(f"🎯 Selected Topic: {topic}")
+return topic
 
     def generate_script(self, topic):
         """
@@ -126,15 +126,16 @@ Return ONLY the JSON array.
 
         client = _get_client()
         response = client.chat.completions.create(
-    model="llama-3.3-70b-versatile",
-    messages=[
-        {
-            "role": "user",
-            "content": prompt
-        }
-    ]
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                      "role": "user",
+                      "content": prompts
+                }
+       ]
 )
 
+topic = response.choices[0].message.content.strip()
 clean_text = (
     response.choices[0].message.content
     .replace("```json", "")
