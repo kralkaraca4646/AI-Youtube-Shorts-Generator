@@ -32,7 +32,7 @@ def clean_cache():
 async def main():
     print("🚀 STARTING AUTOMATION...")
 
-    # 1. BRAIN: Pick Topic, Write Script & Produce YouTube Metadata
+    # 1. BRAIN: Get Topic & Script
     brain = ContentBrain()
     try:
         topic = brain.get_trending_topic()
@@ -46,7 +46,7 @@ async def main():
         print("❌ Script generation failed.")
         return
 
-    # script.json ve metadata.json dosyalarını kaydet
+    # script.json ve metadata.json kaydet
     with open("script.json", "w", encoding="utf-8") as f:
         json.dump(scenes, f, ensure_ascii=False, indent=4)
 
@@ -64,11 +64,11 @@ async def main():
         print(f"❌ Audio Error: {e}")
         return
 
-    # 3. ASSETS: Get Stock Videos
+    # 3. ASSETS: Get Stock Video
     asset_manager = AssetManager()
     assets_map = asset_manager.get_videos(scenes)
 
-    # 4. COMPOSER: Render Scenes with Captions
+    # 4. COMPOSER: Merge Video + Audio + High-Quality Captions
     composer = Composer()
     final_scene_paths = composer.render_all_scenes(scenes, assets_map)
 
