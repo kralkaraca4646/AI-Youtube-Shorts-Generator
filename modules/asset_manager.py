@@ -1,153 +1,82 @@
 import os
 import requests
-import random
 from dotenv import load_dotenv
+
+load_dotenv()
 
 class AssetManager:
     def __init__(self):
-        load_dotenv()
         self.api_key = os.getenv("PEXELS_API_KEY")
+        self.download_dir = os.path.join(os.getcwd(), "assets", "video_clips")
+        os.makedirs(self.download_dir, exist_ok=True)
+
+    def _search_pexels(self, query):
         if not self.api_key:
-            raise RuntimeError("PEXELS_API_KEY is not set. Create a .env file or set the environment variable before running.")
-        self.base_url = "https://api.pexels.com/videos/search"
-        self.headers = {
-            "Authorization": self.api_key
-        }
-        
-        # Ensure download directory exists
-        self.assets_dir = os.path.join(os.getcwd(), "assets", "video_clips")
-        os.makedirs(self.assets_dir, exist_ok=True)
-
-    def search_video(self, query, duration_min=4):
-        """
-        Searches Pexels for a portrait video matching the query.
-        Returns the download URL or None.
-        """
-        print(f"   🔍 Searching Pexels for: '{query}'...")
-        
-        params = {
-            "query": query,
-            "per_page": 5,        # Fetch top 5 results to pick from
-            "orientation": "portrait",
-            "size": "medium"      # 'medium' is usually HD ready, saves bandwidth
-        }
-        
-        try:
-            response = requests.get(self.base_url, headers=self.headers, params=params, timeout=10)
-            if response.status_code != 200:
-                print(f"      ⚠️ API Error: {response.status_code}")
-                return None
-                
-            data = response.json()
-            
-            if not data.get('videos'):
-                # Retry strategy: Simplify query if complex query fails
-                if " " in query:
-                    simple_query = query.split()[-1] # Try last word (usually the noun)
-                    print(f"      ⚠️ No results. Retrying with '{simple_query}'...")
-                    return self.search_video(simple_query)
-                return None
-            
-            # Filter logic: Prefer videos that aren't too short (at least 4 seconds)
-            valid_videos = [v for v in data['videos'] if v['duration'] >= duration_min]
-            
-            if not valid_videos:
-                valid_videos = data['videos'] # Fallback to whatever exists
-                
-            # Randomize selection
-            selected_video = random.choice(valid_videos)
-            
-            # Get best quality video file link
-            video_files = selected_video['video_files']
-            video_files.sort(key=lambda x: x['width'] * x['height'], reverse=True)
-            
-            download_link = video_files[0]['link']
-            return download_link
-
-        except Exception as e:
-            print(f"      ❌ Error searching Pexels: {e}")
+            print("❌ PEXELS_API_KEY is missing!")
             return None
 
-    def download_video(self, url, filename):
-        """
-        Downloads the video content to a local file.
-        """
-        save_path = os.path.join(self.assets_dir, filename)
-        
-        # Caching strategy
-        if os.path.exists(save_path):
-            return save_path
+        headers = {"Authorization": self.api_key}
+        url = f"[https://api.pexels.com/videos/search?query=](https://api.pexels.com/videos/search?query=){query}&per_page=5&orientation=portrait"
 
         try:
-            with requests.get(url, stream=True, timeout=15) as r:
-                r.raise_for_status()
-                with open(save_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192):
-                        f.write(chunk)
-            return save_path
+            res = requests.get(url, headers=headers, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                videos = data.get("videos", [])
+                if videos:
+                    video_files = videos[0].get("video_files", [])
+                    for vf in video_files:
+                        if vf.get("file_type") == "video/mp4":
+                            return vf.get("link")
         except Exception as e:
-            print(f"      ❌ Error downloading {filename}: {e}")
-            return None
+            print(f"⚠️ Pexels search error for '{query}': {e}")
 
-    def get_videos(self, script_data):
-        """
-        NEW LOGIC: Downloads TWO videos per scene (A and B).
-        Returns a list of tuples: [(path_a, path_b), (path_a, path_b), ...]
-        """
-        print("🎥 Starting Double-Feature Video Download...")
+        return None
+
+    def _download_file(self, url, filename):
+        path = os.path.join(self.download_dir, filename)
+        if os.path.exists(path):
+            return path
+
+        try:
+            res = requests.get(url, stream=True, timeout=20)
+            if res.status_code == 200:
+                with open(path, "wb") as f:
+                    for chunk in res.iter_content(chunk_size=1024*1024):
+                        if chunk:
+                            f.write(chunk)
+                return path
+        except Exception as e:
+            print(f"❌ Download error ({filename}): {e}")
+
+        return None
+
+    def get_videos(self, scenes):
+        print(f"🎞️ Sourcing videos for {len(scenes)} scenes...")
         video_pairs = []
 
-        for scene in script_data:
+        for scene in scenes:
             scene_id = scene['id']
-            
-            # 1. Get Search Terms
-            # Fallback to 'keywords' if visual_1/2 don't exist (compatibility mode)
-            query_a = scene.get('visual_1', scene.get('keywords', 'abstract'))
-            query_b = scene.get('visual_2', query_a) # Use A if B is missing
-            
-            # 2. Search & Download Clip A
-            url_a = self.search_video(query_a)
-            path_a = None
-            if url_a:
-                path_a = self.download_video(url_a, f"scene_{scene_id}_a.mp4")
-            
-            # 3. Search & Download Clip B
-            url_b = self.search_video(query_b)
-            path_b = None
-            if url_b:
-                path_b = self.download_video(url_b, f"scene_{scene_id}_b.mp4")
-            
-            # 4. Fallback Logic (Self-Healing)
-            # If B fails, use A twice. If A fails, use B twice.
-            if not path_a and path_b: 
-                path_a = path_b
-                print(f"      ⚠️ Scene {scene_id} Clip A missing. Using Clip B for both.")
-            if not path_b and path_a: 
-                path_b = path_a
-                print(f"      ⚠️ Scene {scene_id} Clip B missing. Using Clip A for both.")
+            q1 = scene.get('visual_1', 'luxury car')
+            q2 = scene.get('visual_2', 'supercar driving')
 
-            # 5. Final Check
-            if path_a and path_b:
-                video_pairs.append((path_a, path_b))
-                print(f"   ✅ Scene {scene_id} Ready (A + B).")
+            print(f"   🔍 Scene {scene_id} Search: A='{q1}' | B='{q2}'")
+
+            url1 = self._search_pexels(q1)
+            url2 = self._search_pexels(q2)
+
+            file1 = self._download_file(url1, f"scene_{scene_id}_a.mp4") if url1 else None
+            file2 = self._download_file(url2, f"scene_{scene_id}_b.mp4") if url2 else None
+
+            if file1 and not file2:
+                file2 = file1
+            elif file2 and not file1:
+                file1 = file2
+
+            if file1 and file2:
+                video_pairs.append((file1, file2))
             else:
-                print(f"   ❌ Scene {scene_id} Completely Failed (No videos found).")
+                print(f"⚠️ Could not find videos for scene {scene_id}")
                 video_pairs.append(None)
 
         return video_pairs
-
-# --- TESTING ---
-if __name__ == "__main__":
-    manager = AssetManager()
-    
-    # Test with new dual-visual format
-    test_script = [
-        {
-            "id": 1, 
-            "visual_1": "cyberpunk city neon", 
-            "visual_2": "hacker typing computer"
-        }
-    ]
-    
-    results = manager.get_videos(test_script)
-    print("🎥 Assets Downloaded:", results)
