@@ -7,7 +7,6 @@ class Composer:
     def __init__(self):
         self.temp_dir = os.path.join(os.getcwd(), "assets", "temp")
         self.final_dir = os.path.join(os.getcwd(), "assets", "final")
-        self.avatar_path = os.path.join(os.getcwd(), "assets", "avatar", "avatars.mp4")
 
         os.makedirs(self.temp_dir, exist_ok=True)
         os.makedirs(self.final_dir, exist_ok=True)
@@ -20,44 +19,29 @@ class Composer:
         except:
             return 0.0
 
-    def _wrap_subtitle(self, text, width=26):
-        """
-        Wraps long scene text into multiple centered lines so it fits
-        nicely in the middle of a 1080x1920 (9:16) frame.
-        """
-        wrapped = textwrap.fill(text, width=width)
-        return wrapped
+    def _wrap_subtitle(self, text, width=18):
+        return textwrap.fill(text, width=width)
 
     def _add_subtitle(self, video_stream, text):
-        """
-        Burns the scene's Turkish narration text into the middle of the video.
-        Uses the generic 'Sans' fontconfig alias so it works on any Linux
-        runner (GitHub Actions ubuntu-latest included) without needing an
-        exact font file path.
-        """
-        wrapped_text = self._wrap_subtitle(text)
+        wrapped_text = self._wrap_subtitle(text.upper(), width=18)
 
         return video_stream.filter(
             'drawtext',
             text=wrapped_text,
-            font='Sans',
-            fontsize=64,
-            fontcolor='white',
-            box=1,
-            boxcolor='black@0.5',
-            boxborderw=20,
+            font='Sans-Bold',
+            fontsize=68,
+            fontcolor='yellow',
+            bordercolor='black',
+            borderw=7,
+            shadowcolor='black@0.8',
+            shadowx=4,
+            shadowy=4,
             line_spacing=12,
             x='(w-text_w)/2',
-            y='(h-text_h)/2'
+            y='(h-text_h)/2 + 250'
         )
 
-    def process_scene(self, scene, video_pair, is_avatar=False):
-        """
-        Combines Audio with Visuals.
-        - If Avatar: Loop single video + CROP LOGO.
-        - If Stock: Split duration 50/50 between Video A and Video B.
-        - Always: Burn the scene text as a centered subtitle.
-        """
+    def process_scene(self, scene, video_pair):
         scene_id = scene['id']
         audio_path = scene['audio_path']
         total_duration = scene['duration']
@@ -67,59 +51,32 @@ class Composer:
         try:
             input_audio = ffmpeg.input(audio_path)
 
-            if is_avatar:
-                # --- AVATAR MODE (Single Loop + CROP) ---
-                print(f"   ⚙️ Processing Scene {scene_id}: 🤖 Avatar Mode (Cropped)")
+            print(f"   ⚙️ Processing Scene {scene_id}: 🎞️ A/B Split Mode")
+            path_a, path_b = video_pair
+            duration_a = total_duration / 2
+            duration_b = (total_duration / 2) + 0.5
 
-                video_stream = (
-                    ffmpeg.input(video_pair[0], stream_loop=-1)
-                    .trim(duration=total_duration + 0.5)
-                    .setpts('PTS-STARTPTS')
+            stream_a = (
+                ffmpeg.input(path_a, stream_loop=-1)
+                .trim(duration=duration_a)
+                .setpts('PTS-STARTPTS')
+                .filter('scale', 1080, 1920).filter('crop', 1080, 1920)
+                .filter('fps', fps=30, round='up')
+            )
 
-                    # ---------------------------------------------------------
-                    # ✂️ LOGO REMOVAL CROP
-                    # ---------------------------------------------------------
-                    # Current setting: Removes 150px from BOTTOM.
-                    .filter('crop', 'iw', 'ih-150', 0, 0)
+            stream_b = (
+                ffmpeg.input(path_b, stream_loop=-1)
+                .trim(duration=duration_b)
+                .setpts('PTS-STARTPTS')
+                .filter('scale', 1080, 1920).filter('crop', 1080, 1920)
+                .filter('fps', fps=30, round='up')
+            )
 
-                    # ---------------------------------------------------------
-                    # 📏 RESIZE & CENTER
-                    # ---------------------------------------------------------
-                    .filter('scale', 1080, 1920, force_original_aspect_ratio='increase')
-                    .filter('crop', 1080, 1920)
-                    .filter('fps', fps=30, round='up')
-                )
-            else:
-                # --- DUAL VIDEO MODE (50/50 Split) ---
-                print(f"   ⚙️ Processing Scene {scene_id}: 🎞️ A/B Split Mode")
-                path_a, path_b = video_pair
+            video_stream = ffmpeg.concat(stream_a, stream_b, v=1, a=0)
 
-                duration_a = total_duration / 2
-                duration_b = (total_duration / 2) + 0.5
-
-                stream_a = (
-                    ffmpeg.input(path_a, stream_loop=-1)
-                    .trim(duration=duration_a)
-                    .setpts('PTS-STARTPTS')
-                    .filter('scale', 1080, 1920).filter('crop', 1080, 1920)
-                    .filter('fps', fps=30, round='up')
-                )
-
-                stream_b = (
-                    ffmpeg.input(path_b, stream_loop=-1)
-                    .trim(duration=duration_b)
-                    .setpts('PTS-STARTPTS')
-                    .filter('scale', 1080, 1920).filter('crop', 1080, 1920)
-                    .filter('fps', fps=30, round='up')
-                )
-
-                video_stream = ffmpeg.concat(stream_a, stream_b, v=1, a=0)
-
-            # --- SUBTITLE (centered, Turkish text) ---
             if scene_text:
                 video_stream = self._add_subtitle(video_stream, scene_text)
 
-            # Combine Video + Audio
             runner = ffmpeg.output(
                 video_stream,
                 input_audio,
@@ -137,35 +94,21 @@ class Composer:
             print(f"❌ Render Fail Scene {scene_id}: {e.stderr.decode('utf8') if e.stderr else str(e)}")
             return None
 
-    def render_all_scenes(self, script_data, video_pairs):
-        """
-        Iterates script and renders individual scenes.
-        Avatar injection is disabled — every scene uses A/B Split Mode.
-        """
+    def render_all_scenes(self, scenes, video_pairs):
         rendered_paths = []
-        avatar_indices = []  # Avatar mode disabled — never populated
 
-        for i, scene in enumerate(script_data):
+        for i, scene in enumerate(scenes):
             current_pair = video_pairs[i]
-            is_avatar = False
-
-            if i in avatar_indices:
-                current_pair = (self.avatar_path, None)
-                is_avatar = True
-            elif current_pair is None:
+            if current_pair is None:
                 continue
 
-            output_path = self.process_scene(scene, current_pair, is_avatar)
+            output_path = self.process_scene(scene, current_pair)
             if output_path:
                 rendered_paths.append(output_path)
 
         return rendered_paths
 
     def concatenate_with_transitions(self, video_paths, output_filename="final_short.mp4"):
-        """
-        Stitches rendered scenes together.
-        INCLUDES FIXES FOR: Windows 0x80004005 Error & Playback Issues.
-        """
         print("🎬 Stitching final video...")
         output_path = os.path.join(self.final_dir, output_filename)
 
@@ -173,7 +116,7 @@ class Composer:
             try:
                 os.remove(output_path)
             except:
-                print("⚠️ Warning: Could not delete old file. It might be open in a player.")
+                pass
 
         if not video_paths:
             return None
@@ -192,7 +135,6 @@ class Composer:
             offset = current_dur - trans_dur
 
             effect = random.choice(self.transitions)
-            print(f"   ✨ Transition {i}: '{effect}' at {offset:.2f}s")
 
             v_stream = ffmpeg.filter(
                 [v_stream, next_clip.video],
@@ -215,20 +157,18 @@ class Composer:
                 v_stream,
                 a_stream,
                 output_path,
-                vcodec='libx264',   # Standard H.264 video
-                acodec='aac',       # Standard AAC audio
-                pix_fmt='yuv420p',  # 🔥 FIX 1: Windows compatibility
-                movflags='faststart',  # 🔥 FIX 2: Corruption fix
+                vcodec='libx264',
+                acodec='aac',
+                pix_fmt='yuv420p',
+                movflags='faststart',
                 preset='medium'
             )
 
             runner.run(overwrite_output=True, quiet=False)
-
             print(f"✅ FINAL VIDEO SAVED: {output_path}")
             return output_path
 
         except ffmpeg.Error as e:
-            error_log = e.stderr.decode('utf8') if e.stderr else str(e)
-            print(f"❌ Stitching Error: {error_log}")
+            print(f"❌ Stitching Error: {e.stderr.decode('utf8') if e.stderr else str(e)}")
             return None
             
