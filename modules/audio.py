@@ -5,7 +5,7 @@ from mutagen.mp3 import MP3
 
 
 class AudioEngine:
-    def __init__(self, voice="tr-TR-EmelNeural"):
+    def __init__(self, voice="tr-TR-AhmetNeural"):
         # Turkish female voice by default.
         # Alternative Turkish voice: "tr-TR-AhmetNeural" (male).
         self.voice = voice
