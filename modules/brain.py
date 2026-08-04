@@ -75,6 +75,16 @@ topic = response.choices[0].message.content.strip()
             "mood": "educational"
         }}
     ]
+    ### IMPORTANT
+Return ONLY valid JSON.
+
+Do NOT write any explanation.
+
+Do NOT use markdown.
+
+Do NOT wrap the JSON inside ```json.
+
+Return ONLY the JSON array.
     """
     #     prompt = f"""
     # You are a master visual storyteller creating a viral YouTube Short.
