@@ -1,7 +1,6 @@
 import os
 import asyncio
 import edge_tts
-from mutagen.mp3 import MP3
 import ffmpeg
 
 class AudioEngine:
@@ -17,11 +16,31 @@ class AudioEngine:
 
         for attempt in range(retries):
             try:
+                # rate="+10%" hızlandırmasını koruyoruz
                 communicate = edge_tts.Communicate(text, self.voice, rate="+10%")
-                await communicate.save(output_path)
+                word_timestamps = []
+
+                # Stream kullanarak hem sesi yazıyoruz hem WordBoundary yakalıyoruz
+                with open(output_path, "wb") as f:
+                    async for chunk in communicate.stream():
+                        if chunk["type"] == "audio":
+                            f.write(chunk["data"])
+                        elif chunk["type"] == "WordBoundary":
+                            # offset ve duration 100-nanosaniye cinsindendir, saniyeye çeviriyoruz
+                            start_time = chunk["offset"] / 10000000.0
+                            duration = chunk["duration"] / 10000000.0
+                            word = chunk["text"]
+                            
+                            word_timestamps.append({
+                                "word": word,
+                                "start": start_time,
+                                "end": start_time + duration
+                            })
 
                 # --- HOOK SFX MİKSLEME ---
+                final_audio_path = output_path
                 sfx_path = os.path.join(self.sfx_dir, "hook.mp3")
+                
                 if is_first_scene and os.path.exists(sfx_path):
                     mixed_output = os.path.join(self.output_dir, f"sfx_{output_filename}")
                     try:
@@ -31,12 +50,14 @@ class AudioEngine:
                         mixed = ffmpeg.filter([voice_in, sfx_in], 'amix', inputs=2, duration='first')
                         out = ffmpeg.output(mixed, mixed_output, acodec='libmp3lame')
                         out.run(overwrite_output=True, quiet=True)
-                        return mixed_output
+                        final_audio_path = mixed_output
                     except Exception as sfx_err:
                         print(f"⚠️ SFX mixing failed, using plain voice: {sfx_err}")
-                        return output_path
 
-                return output_path
+                # Toplam süreyi son kelimenin bitişinden çıkarıyoruz
+                total_duration = word_timestamps[-1]['end'] if word_timestamps else 3.0
+
+                return final_audio_path, total_duration, word_timestamps
 
             except Exception as e:
                 print(f"      ⚠️ Audio Error (Attempt {attempt+1}/{retries}): {e}")
@@ -45,16 +66,8 @@ class AudioEngine:
                 else:
                     raise e
 
-    def get_audio_duration(self, file_path):
-        try:
-            audio = MP3(file_path)
-            return audio.info.length
-        except Exception as e:
-            print(f"❌ Error reading audio length: {e}")
-            return 0.0
-
     async def process_script(self, scenes):
-        print(f"🎙️ Starting Audio Generation for {len(scenes)} scenes...")
+        print(f"🎙️ Starting Audio & Word Timestamp Generation for {len(scenes)} scenes...")
 
         for idx, scene in enumerate(scenes):
             scene_id = scene['id']
@@ -63,18 +76,17 @@ class AudioEngine:
             is_first = (idx == 0)
 
             try:
-                file_path = await self.generate_audio(text, filename, is_first_scene=is_first)
-                duration = self.get_audio_duration(file_path)
+                file_path, duration, word_timestamps = await self.generate_audio(text, filename, is_first_scene=is_first)
 
                 scene['audio_path'] = file_path
                 scene['duration'] = duration
+                scene['word_timestamps'] = word_timestamps
 
-                print(f"   ✅ Scene {scene_id}: {duration:.2f}s generated.")
-                await asyncio.sleep(1)
+                print(f"   ✅ Scene {scene_id}: {duration:.2f}s generated ({len(word_timestamps)} words captured).")
+                await asyncio.sleep(0.5)
 
             except Exception as e:
-                print(f"   ❌ Skipping Scene {scene_id} due to audio error.")
+                print(f"   ❌ Skipping Scene {scene_id} due to audio error: {e}")
                 continue
 
         return scenes
-        
