@@ -1,5 +1,6 @@
 import os
 import random
+import textwrap
 import ffmpeg
 
 class Composer:
@@ -19,15 +20,48 @@ class Composer:
         except:
             return 0.0
 
+    def _wrap_subtitle(self, text, width=26):
+        """
+        Wraps long scene text into multiple centered lines so it fits
+        nicely in the middle of a 1080x1920 (9:16) frame.
+        """
+        wrapped = textwrap.fill(text, width=width)
+        return wrapped
+
+    def _add_subtitle(self, video_stream, text):
+        """
+        Burns the scene's Turkish narration text into the middle of the video.
+        Uses the generic 'Sans' fontconfig alias so it works on any Linux
+        runner (GitHub Actions ubuntu-latest included) without needing an
+        exact font file path.
+        """
+        wrapped_text = self._wrap_subtitle(text)
+
+        return video_stream.filter(
+            'drawtext',
+            text=wrapped_text,
+            font='Sans',
+            fontsize=64,
+            fontcolor='white',
+            box=1,
+            boxcolor='black@0.5',
+            boxborderw=20,
+            line_spacing=12,
+            x='(w-text_w)/2',
+            y='(h-text_h)/2'
+        )
+
     def process_scene(self, scene, video_pair, is_avatar=False):
         """
         Combines Audio with Visuals.
         - If Avatar: Loop single video + CROP LOGO.
         - If Stock: Split duration 50/50 between Video A and Video B.
+        - Always: Burn the scene text as a centered subtitle.
         """
         scene_id = scene['id']
         audio_path = scene['audio_path']
         total_duration = scene['duration']
+        scene_text = scene.get('text', '')
         output_path = os.path.join(self.temp_dir, f"scene_{scene_id}.mp4")
 
         try:
@@ -80,6 +114,10 @@ class Composer:
                 )
 
                 video_stream = ffmpeg.concat(stream_a, stream_b, v=1, a=0)
+
+            # --- SUBTITLE (centered, Turkish text) ---
+            if scene_text:
+                video_stream = self._add_subtitle(video_stream, scene_text)
 
             # Combine Video + Audio
             runner = ffmpeg.output(
@@ -180,7 +218,7 @@ class Composer:
                 vcodec='libx264',   # Standard H.264 video
                 acodec='aac',       # Standard AAC audio
                 pix_fmt='yuv420p',  # 🔥 FIX 1: Windows compatibility
-                movflags='faststart', # 🔥 FIX 2: Corruption fix
+                movflags='faststart',  # 🔥 FIX 2: Corruption fix
                 preset='medium'
             )
 
@@ -193,3 +231,4 @@ class Composer:
             error_log = e.stderr.decode('utf8') if e.stderr else str(e)
             print(f"❌ Stitching Error: {error_log}")
             return None
+            
