@@ -16,7 +16,7 @@ class AssetManager:
             return None
 
         headers = {"Authorization": self.api_key}
-        url = f"[https://api.pexels.com/videos/search?query=](https://api.pexels.com/videos/search?query=){query}&per_page=5&orientation=portrait"
+        url = f"https://api.pexels.com/videos/search?query={query}&per_page=5&orientation=portrait"
 
         try:
             res = requests.get(url, headers=headers, timeout=10)
