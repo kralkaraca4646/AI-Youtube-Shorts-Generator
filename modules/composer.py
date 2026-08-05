@@ -60,9 +60,12 @@ class Composer:
                 # ASS Altyazı Dosyasını Üret
                 ASSSubtitleGenerator.create_ass_file(word_timestamps, ass_path)
                 
-                # Relative path alarak FFmpeg yol çakışmasını önlüyoruz
-                rel_ass_path = os.path.relpath(ass_path)
-                video_stream = video_stream.filter('subtitles', rel_ass_path)
+                # Bağıl yol alıp Linux/Windows yol ayrımını temizliyoruz
+                rel_ass_path = os.path.relpath(ass_path).replace("\\", "/")
+                print(f"   💬 ASS Subtitle Prepared: {rel_ass_path} | Words: {len(word_timestamps)}")
+                
+                # FFmpeg filtresine parametre olarak ekleme
+                video_stream = video_stream.filter('subtitles', filename=rel_ass_path)
 
             runner = ffmpeg.output(
                 video_stream,
