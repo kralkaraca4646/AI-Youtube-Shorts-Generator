@@ -1,66 +1,67 @@
 import os
+from PIL import Image, ImageDraw, ImageFont
 
-class ASSSubtitleGenerator:
+class MoviePySubtitleGenerator:
     @staticmethod
-    def create_ass_file(word_timestamps, output_ass_path):
+    def create_text_clip_image(words_group, active_word_index, img_size=(1080, 1920)):
         """
-        Ultra Kalite Shorts Altyazısı:
-        - Büyük Harf Dönüşümü (UPPERCASE)
-        - Ekranın tam ortasında/hafif altında (Alignment 2 / MarginV 750)
-        - Kalın 8px Siyah Kontur + Yumuşak Arka Plan Gölgesi
-        - Aktif Kelime: Parlak Sarı (#00FFFF / &H0000FFFF&) + Büyük Harf
-        - Pasif Kelimeler: Saf Beyaz (#FFFFFF / &H00FFFFFF&)
+        Kelime grubunu ve aktif olan kelimeyi sarı, diğerlerini beyaz yapacak şekilde 
+        şeffaf bir PNG görseli (ImageClip) üretir.
         """
+        img = Image.new("RGBA", img_size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        # Linux sistemlerde (GitHub Actions) Montserrat fontunu arıyoruz, yoksa varsayılan kullanıyoruz
+        font_path = "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf" # Yedek
+        for p in [
+            "/usr/share/fonts/truetype/custom/Montserrat-Bold.ttf",
+            "/usr/share/fonts/opentype/montserrat/Montserrat-Bold.ttf",
+            "/usr/share/fonts/truetype/fonts-montserrat/Montserrat-Bold.ttf"
+        ]:
+            if os.path.exists(p):
+                font_path = p
+                break
         
-        header = """[Script Info]
-ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
-ScaledBorderAndShadow: yes
+        try:
+            font = ImageFont.truetype(font_path, size=75)
+        except:
+            font = ImageFont.load_default()
 
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: ShortsStyle,Montserrat,82,&H00FFFFFF,&H0000FFFF,&H00000000,&H90000000,-1,0,0,0,105,105,2,0,1,8,4,2,60,60,750,1
+        # Metni oluştur (Tüm kelimeler büyük harf)
+        text_full = " ".join([w['word'].upper() for w in words_group])
+        
+        # Metni ortalamak için boyut hesabı (Modern Pillow sürümleri için textbbox)
+        try:
+            bbox = draw.textbbox((0, 0), text_full, font=font)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+        except:
+            text_w, text_h = 800, 100 # Fallback
 
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-"""
+        x = (img_size[0] - text_w) / 2
+        y = img_size[1] - 400  # Ekranın alt kısmına yakın
 
-        events = []
-        chunk_size = 3
-        chunks = [word_timestamps[i:i + chunk_size] for i in range(0, len(word_timestamps), chunk_size)]
-
-        for chunk in chunks:
-            if not chunk:
-                continue
+        # Kelime kelime çizim (Aktif olan sarı, diğerleri beyaz + siyah kontur)
+        current_x = x
+        for i, w in enumerate(words_group):
+            word_str = w['word'].upper() + " "
+            is_active = (i == active_word_index)
+            color = "#00FFFF" if is_active else "#FFFFFF" # Aktif Sarı, Pasif Beyaz
             
-            # Her kelime grubu ekranda konuşulurken sırayla sarı yansın
-            for current_word in chunk:
-                w_start = ASSSubtitleGenerator._format_time(current_word['start'])
-                w_end = ASSSubtitleGenerator._format_time(current_word['end'])
-                
-                text_parts = []
-                for w in chunk:
-                    clean_word = w['word'].upper()  # Tüm harfleri BÜYÜK yapıyoruz
-                    if w == current_word:
-                        # AKTİF KELİME: Parlak Sarı & Kalın Görünüm
-                        text_parts.append(f"{{\\c&H0000FFFF&\\b1}}{clean_word}{{\\r}}")
-                    else:
-                        # PASİF KELİMELER: Saf Beyaz
-                        text_parts.append(f"{{\\c&H00FFFFFF&}}{clean_word}")
-                
-                line_text = " ".join(text_parts)
-                events.append(f"Dialogue: 0,{w_start},{w_end},ShortsStyle,,0,0,0,,{line_text}")
-
-        with open(output_ass_path, "w", encoding="utf-8") as f:
-            f.write(header + "\n".join(events))
+            # Siyah kontur (Outline etkisi için 4 yöne gölge)
+            outline_color = "#000000"
+            for adj_x in [-3, 0, 3]:
+                for adj_y in [-3, 0, 3]:
+                    draw.text((current_x + adj_x, y + adj_y), word_str, font=font, fill=outline_color)
             
-        return output_ass_path
+            # Ana renk
+            draw.text((current_x, y), word_str, font=font, fill=color)
+            
+            # X koordinatını ilerlet
+            try:
+                w_bbox = draw.textbbox((0, 0), word_str, font=font)
+                current_x += (w_bbox[2] - w_bbox[0])
+            except:
+                current_x += 150
 
-    @staticmethod
-    def _format_time(seconds):
-        hrs = int(seconds // 3600)
-        mins = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
-        msecs = int((seconds % 1) * 100)
-        return f"{hrs}:{mins:02d}:{secs:02d}.{msecs:02d}"
+        return img
