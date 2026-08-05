@@ -11,36 +11,46 @@ class AudioEngine:
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(self.sfx_dir, exist_ok=True)
 
-    async def generate_audio(self, text, output_filename, is_first_scene=False, retries=3):
+    async def generate_audio(self, text, output_filename, is_first_scene=False, retries=3, debug=False):
         output_path = os.path.join(self.output_dir, output_filename)
 
         for attempt in range(retries):
             try:
-                # rate varsayılan tutulur; kelime zamanlamalarının %100 doğru yakalanması için kritiktir
                 communicate = edge_tts.Communicate(text, self.voice)
                 word_timestamps = []
+                debug_printed = 0
 
-                # Stream üzerinden hem sesi yazıyoruz hem de WordBoundary yakalıyoruz
                 with open(output_path, "wb") as f:
                     async for chunk in communicate.stream():
+                        # --- GEÇİCİ TEŞHİS BLOĞU ---
+                        # Gerçek chunk yapısını görmek için ilk birkaç chunk'ı basıyoruz.
+                        # Sorun çözüldükten sonra bu bloğu kaldırabiliriz.
+                        if debug and debug_printed < 6:
+                            keys = list(chunk.keys()) if isinstance(chunk, dict) else "NOT_A_DICT"
+                            chunk_type = chunk.get("type") if isinstance(chunk, dict) else type(chunk).__name__
+                            print(f"      🔬 DEBUG chunk #{debug_printed}: type={chunk_type!r} keys={keys}")
+                            debug_printed += 1
+
                         if chunk["type"] == "audio":
                             f.write(chunk["data"])
                         elif chunk["type"] == "WordBoundary":
-                            # offset ve duration 100-nanosaniye cinsindendir, saniyeye çeviriyoruz
                             start_time = chunk["offset"] / 10000000.0
                             duration = chunk["duration"] / 10000000.0
                             word = chunk["text"]
-                            
+
                             word_timestamps.append({
                                 "word": word,
                                 "start": start_time,
                                 "end": start_time + duration
                             })
 
+                if debug:
+                    print(f"      🔬 DEBUG: toplam {len(word_timestamps)} WordBoundary yakalandı.")
+
                 # --- HOOK SFX MİKSLEME ---
                 final_audio_path = output_path
                 sfx_path = os.path.join(self.sfx_dir, "hook.mp3")
-                
+
                 if is_first_scene and os.path.exists(sfx_path):
                     mixed_output = os.path.join(self.output_dir, f"sfx_{output_filename}")
                     try:
@@ -54,7 +64,6 @@ class AudioEngine:
                     except Exception as sfx_err:
                         print(f"   ⚠️ SFX mixing failed, using plain voice: {sfx_err}")
 
-                # Toplam süreyi son kelimenin bitiş süresinden alıyoruz
                 total_duration = word_timestamps[-1]['end'] if word_timestamps else 3.0
 
                 return final_audio_path, total_duration, word_timestamps
@@ -76,7 +85,10 @@ class AudioEngine:
             is_first = (idx == 0)
 
             try:
-                file_path, duration, word_timestamps = await self.generate_audio(text, filename, is_first_scene=is_first)
+                # Sadece ilk sahnede debug açık - log'u şişirmemek için
+                file_path, duration, word_timestamps = await self.generate_audio(
+                    text, filename, is_first_scene=is_first, debug=is_first
+                )
 
                 scene['audio_path'] = file_path
                 scene['duration'] = duration
