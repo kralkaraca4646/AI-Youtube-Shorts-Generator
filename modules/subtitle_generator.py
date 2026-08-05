@@ -48,7 +48,7 @@ def _load_font(size=75):
 
 
 class MoviePySubtitleGenerator:
-           @staticmethod
+    @staticmethod
     def create_text_clip_image(words_group, active_word_index, img_size=(1080, 1920)):
         img = Image.new("RGBA", img_size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
