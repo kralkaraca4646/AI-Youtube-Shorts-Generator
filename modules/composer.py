@@ -1,7 +1,7 @@
 import os
 import random
 import numpy as np
-from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
+from moviepy.editor import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips, vfx
 from modules.subtitle_generator import MoviePySubtitleGenerator
 
 class Composer:
@@ -13,6 +13,16 @@ class Composer:
         os.makedirs(self.final_dir, exist_ok=True)
         self.transitions = ['fade']
 
+    def _ensure_min_duration(self, clip, min_duration):
+        """
+        Kaynak video, ihtiyacımız olan süreden kısaysa MoviePy'nin vfx.loop
+        ile baştan tekrar oynatarak süreyi doldurur. Bunu yapmazsak
+        set_duration() son kareyi dondurup videoyu 'takılı' gösterir.
+        """
+        if clip.duration < min_duration:
+            clip = clip.fx(vfx.loop, duration=min_duration)
+        return clip
+
     def process_scene(self, scene, video_pair):
         scene_id = scene['id']
         audio_path = scene['audio_path']
@@ -20,27 +30,34 @@ class Composer:
         word_timestamps = scene.get('word_timestamps', [])
         output_path = os.path.join(self.temp_dir, f"scene_{scene_id}.mp4")
 
+        print(f"   🔤 Scene {scene_id}: {len(word_timestamps)} word_timestamps received.")
+
         try:
             print(f"   ⚙️ Processing Scene {scene_id} with MoviePy...")
             path_a, path_b = video_pair
-            
+
             # Videoları yükle ve dikey formata (1080x1920) ayarla
             clip_a = VideoFileClip(path_a).resize(height=1920)
-            # Kırpma işlemi (Center crop to 1080x1920)
             if clip_a.w > 1080:
                 x_center = clip_a.w / 2
-                clip_a = clip_a.crop(x1=x_center-540, x2=x_center+540, y1=0, y2=1920)
+                clip_a = clip_a.crop(x1=x_center - 540, x2=x_center + 540, y1=0, y2=1920)
 
             clip_b = VideoFileClip(path_b).resize(height=1920)
             if clip_b.w > 1080:
                 x_center = clip_b.w / 2
-                clip_b = clip_b.crop(x1=x_center-540, x2=x_center+540, y1=0, y2=1920)
+                clip_b = clip_b.crop(x1=x_center - 540, x2=x_center + 540, y1=0, y2=1920)
 
             # A/B Split: Yarısı ilk video, yarısı ikinci video
             half_dur = total_duration / 2
-            sub_a = clip_a.subclip(0, min(half_dur, clip_a.duration))
-            sub_b = clip_b.subclip(0, min(half_dur + 0.5, clip_b.duration))
-            
+            b_dur = half_dur + 0.5
+
+            # 🔧 FIX: Kaynak video kısaysa donmak yerine loop ile doldur
+            clip_a = self._ensure_min_duration(clip_a, half_dur)
+            clip_b = self._ensure_min_duration(clip_b, b_dur)
+
+            sub_a = clip_a.subclip(0, half_dur)
+            sub_b = clip_b.subclip(0, b_dur)
+
             video_clips = concatenate_videoclips([sub_a, sub_b], method="compose")
             video_clips = video_clips.set_duration(total_duration)
 
@@ -50,34 +67,33 @@ class Composer:
 
             # --- MOVIEPY ALTYAZI KATMANLARI (SUBTITLES) ---
             subtitle_clips = [video_clips]
-            
+
             if word_timestamps:
                 chunk_size = 3
                 chunks = [word_timestamps[i:i + chunk_size] for i in range(0, len(word_timestamps), chunk_size)]
-                
+
                 for chunk in chunks:
                     for i, active_w in enumerate(chunk):
                         start_t = active_w['start']
                         end_t = active_w['end']
-                        
-                        # Çok kısa veya hatalı zaman aralıklarını atla
+
                         if end_t <= start_t:
                             end_t = start_t + 0.2
 
-                        # Şeffaf altyazı görselini üret
                         img = MoviePySubtitleGenerator.create_text_clip_image(chunk, i)
-                        
-                        # MoviePy ImageClip'e çevir ve süresini ayarla
+
                         txt_clip = (ImageClip(np.array(img))
                                     .set_start(start_t)
                                     .set_end(end_t)
                                     .set_duration(end_t - start_t))
-                        
+
                         subtitle_clips.append(txt_clip)
+            else:
+                print(f"   ⚠️ Scene {scene_id}: word_timestamps boş, altyazı eklenmeyecek.")
 
             # Tüm katmanları birleştir
             final_scene = CompositeVideoClip(subtitle_clips)
-            
+
             # Sahneyi renderla
             final_scene.write_videofile(
                 output_path,
@@ -121,7 +137,7 @@ class Composer:
         try:
             clips = [VideoFileClip(p) for p in video_paths]
             final_video = concatenate_videoclips(clips, method="compose")
-            
+
             final_video.write_videofile(
                 output_path,
                 fps=30,
