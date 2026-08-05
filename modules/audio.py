@@ -16,11 +16,11 @@ class AudioEngine:
 
         for attempt in range(retries):
             try:
-                # rate parametresini kaldırdık: WordBoundary zamanlamalarının %100 doğru gelmesi için kritiktir!
+                # rate varsayılan tutulur; kelime zamanlamalarının %100 doğru yakalanması için kritiktir
                 communicate = edge_tts.Communicate(text, self.voice)
                 word_timestamps = []
 
-                # Stream kullanarak hem sesi yazıyoruz hem WordBoundary yakalıyoruz
+                # Stream üzerinden hem sesi yazıyoruz hem de WordBoundary yakalıyoruz
                 with open(output_path, "wb") as f:
                     async for chunk in communicate.stream():
                         if chunk["type"] == "audio":
@@ -52,9 +52,9 @@ class AudioEngine:
                         out.run(overwrite_output=True, quiet=True)
                         final_audio_path = mixed_output
                     except Exception as sfx_err:
-                        print(f"⚠️ SFX mixing failed, using plain voice: {sfx_err}")
+                        print(f"   ⚠️ SFX mixing failed, using plain voice: {sfx_err}")
 
-                # Toplam süreyi son kelimenin bitişinden çıkarıyoruz
+                # Toplam süreyi son kelimenin bitiş süresinden alıyoruz
                 total_duration = word_timestamps[-1]['end'] if word_timestamps else 3.0
 
                 return final_audio_path, total_duration, word_timestamps
