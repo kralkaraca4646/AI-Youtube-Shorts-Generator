@@ -16,8 +16,8 @@ class AudioEngine:
 
         for attempt in range(retries):
             try:
-                # rate="+10%" hızlandırmasını koruyoruz
-                communicate = edge_tts.Communicate(text, self.voice, rate="+10%")
+                # rate parametresini kaldırdık: WordBoundary zamanlamalarının %100 doğru gelmesi için kritiktir!
+                communicate = edge_tts.Communicate(text, self.voice)
                 word_timestamps = []
 
                 # Stream kullanarak hem sesi yazıyoruz hem WordBoundary yakalıyoruz
