@@ -4,3 +4,4 @@ edge-tts
 ffmpeg-python
 requests
 mutagen
+groq
