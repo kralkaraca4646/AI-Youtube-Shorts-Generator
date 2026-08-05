@@ -48,15 +48,15 @@ def _load_font(size=75):
 
 
 class MoviePySubtitleGenerator:
-    @staticmethod
+           @staticmethod
     def create_text_clip_image(words_group, active_word_index, img_size=(1080, 1920)):
         img = Image.new("RGBA", img_size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        # Font boyutunu koruyoruz
-        font = _load_font(size=70)
+        # Gövdeyi daha tok tutmak için boyutu 75 yapıyoruz
+        font = _load_font(size=75)
 
-        # --- SATIRLARA BÖLME VE ORTALAMA MANTIĞI (Taşmayı Önler) ---
+        # --- SATIRLARA BÖLME MANTIĞI ---
         max_width = img_size[0] - 140  # Sağdan soldan güvenlik payı
         lines = []
         current_line = []
@@ -69,42 +69,45 @@ class MoviePySubtitleGenerator:
                 word_w = bbox[2] - bbox[0]
             except Exception:
                 word_w = 150
-                
+
             if current_line_width + word_w > max_width and current_line:
                 lines.append(current_line)
                 current_line = []
                 current_line_width = 0
-                
+
             current_line.append({'index': i, 'text': word_str, 'width': word_w})
             current_line_width += word_w
-            
+
         if current_line:
             lines.append(current_line)
 
-        # Dikey konumlama
-        line_height = 90
+        # --- DİKEY TAM ORTALAMA (Y Ekseni) ---
+        line_height = 95
         total_text_height = len(lines) * line_height
-        current_y = img_size[1] - 400 - (total_text_height / 2)
+        # Ekran yüksekliğinin yarısından (1920 / 2 = 960) toplam metin yüksekliğinin yarısını çıkararak dikeyde tam ortalıyoruz
+        current_y = (img_size[1] / 2) - (total_text_height / 2)
 
-        # Çizim ve Kalınlaştırma (Stroke / Thick Outline)
+        # --- ÇİZİM VE YATAY ORTALAMA (X Ekseni) + ET KOYU KONTUR ---
         for line in lines:
             line_total_width = sum([item['width'] for item in line])
+            # Her satırı kendi genişliğine göre yatayda ekrana ortala
             current_x = (img_size[0] - line_total_width) / 2
-            
+
             for item in line:
                 is_active = (item['index'] == active_word_index)
                 color = "#00FFFF" if is_active else "#FFFFFF"
-                
-                # Siyah Konturu Güçlendirme (-5 ile +5 arası adımlarla font daha BOLD/kalın gözükür)
-                outline_color = "#000000"
-                for adj_x in range(-5, 6, 2):
-                    for adj_y in range(-5, 6, 2):
-                        draw.text((current_x + adj_x, current_y + adj_y), item['text'], font=font, fill=outline_color)
-                
-                # Metni çiz
-                draw.text((current_x, current_y), item['text'], font=font, fill=color)
+
+                # stroke_width=10 ile ince fontları bile Extra Bold gösteren siyah zırh
+                draw.text(
+                    (current_x, current_y), 
+                    item['text'], 
+                    font=font, 
+                    fill=color, 
+                    stroke_width=10, 
+                    stroke_fill="#000000"
+                )
                 current_x += item['width']
-                
+
             current_y += line_height
 
         return img
