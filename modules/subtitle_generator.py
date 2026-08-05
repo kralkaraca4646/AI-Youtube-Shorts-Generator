@@ -53,36 +53,58 @@ class MoviePySubtitleGenerator:
         img = Image.new("RGBA", img_size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
 
-        font = _load_font(size=75)
+        # Font boyutunu koruyoruz
+        font = _load_font(size=70)
 
-        text_full = " ".join([w['word'].upper() for w in words_group])
+        # --- SATIRLARA BÖLME VE ORTALAMA MANTIĞI (Taşmayı Önler) ---
+        max_width = img_size[0] - 140  # Sağdan soldan güvenlik payı
+        lines = []
+        current_line = []
+        current_line_width = 0
 
-        try:
-            bbox = draw.textbbox((0, 0), text_full, font=font)
-            text_w = bbox[2] - bbox[0]
-        except Exception:
-            text_w = 800
-
-        x = (img_size[0] - text_w) / 2
-        y = img_size[1] - 400
-
-        current_x = x
         for i, w in enumerate(words_group):
             word_str = w['word'].upper() + " "
-            is_active = (i == active_word_index)
-            color = "#00FFFF" if is_active else "#FFFFFF"
-
-            outline_color = "#000000"
-            for adj_x in [-3, 0, 3]:
-                for adj_y in [-3, 0, 3]:
-                    draw.text((current_x + adj_x, y + adj_y), word_str, font=font, fill=outline_color)
-
-            draw.text((current_x, y), word_str, font=font, fill=color)
-
             try:
-                w_bbox = draw.textbbox((0, 0), word_str, font=font)
-                current_x += (w_bbox[2] - w_bbox[0])
+                bbox = draw.textbbox((0, 0), word_str, font=font)
+                word_w = bbox[2] - bbox[0]
             except Exception:
-                current_x += 150
+                word_w = 150
+                
+            if current_line_width + word_w > max_width and current_line:
+                lines.append(current_line)
+                current_line = []
+                current_line_width = 0
+                
+            current_line.append({'index': i, 'text': word_str, 'width': word_w})
+            current_line_width += word_w
+            
+        if current_line:
+            lines.append(current_line)
+
+        # Dikey konumlama
+        line_height = 90
+        total_text_height = len(lines) * line_height
+        current_y = img_size[1] - 400 - (total_text_height / 2)
+
+        # Çizim ve Kalınlaştırma (Stroke / Thick Outline)
+        for line in lines:
+            line_total_width = sum([item['width'] for item in line])
+            current_x = (img_size[0] - line_total_width) / 2
+            
+            for item in line:
+                is_active = (item['index'] == active_word_index)
+                color = "#00FFFF" if is_active else "#FFFFFF"
+                
+                # Siyah Konturu Güçlendirme (-5 ile +5 arası adımlarla font daha BOLD/kalın gözükür)
+                outline_color = "#000000"
+                for adj_x in range(-5, 6, 2):
+                    for adj_y in range(-5, 6, 2):
+                        draw.text((current_x + adj_x, current_y + adj_y), item['text'], font=font, fill=outline_color)
+                
+                # Metni çiz
+                draw.text((current_x, current_y), item['text'], font=font, fill=color)
+                current_x += item['width']
+                
+            current_y += line_height
 
         return img
